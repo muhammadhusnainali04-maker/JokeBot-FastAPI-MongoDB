@@ -1,7 +1,15 @@
 import streamlit as st
 import requests
+import os
 
 st.set_page_config(page_title="Joke Bot AI", page_icon="🃏")
+
+# --- CONFIGURATION ---
+# Check if running on Render; if not, use localhost
+if os.getenv("RENDER"):
+    BASE_URL = "https://jokebot-fastapi-mongodb-2.onrender.com"
+else:
+    BASE_URL = "http://127.0.0.1:8000"
 
 # --- 1. Login Logic ---
 if "logged_in" not in st.session_state:
@@ -13,25 +21,18 @@ with st.sidebar:
     if not st.session_state.logged_in:
         uid_input = st.text_input("Enter your User ID (e.g., user123)")
         if st.button("Login"):
-                    # Inside the "if st.button('Login'):" block in frontend.py
-
             if uid_input:
                 st.session_state.user_id = uid_input
                 st.session_state.logged_in = True
                 
-                # --- NEW: Fetch history from backend ---
+                # Fetch history from the dynamic BASE_URL
                 try:
-                    hist_response = requests.get(f"http://127.0.0.1:8000/history/{uid_input}")
+                    hist_response = requests.get(f"{BASE_URL}/history/{uid_input}")
                     if hist_response.status_code == 200:
-                        # Sync the database history with the Streamlit session
                         st.session_state.messages = hist_response.json().get("history", [])
                 except Exception as e:
                     st.error(f"Could not load history: {e}")
                 
-                st.rerun()
-            if uid_input:
-                st.session_state.user_id = uid_input
-                st.session_state.logged_in = True
                 st.rerun()
             else:
                 st.error("Please enter an ID")
@@ -39,24 +40,15 @@ with st.sidebar:
         st.success(f"Logged in as: {st.session_state.user_id}")
         if st.button("Logout"):
             st.session_state.logged_in = False
-            st.session_state.messages = [] # Clear UI history on logout
+            st.session_state.messages = [] 
             st.rerun()
 
 # --- 2. Chat Interface ---
 st.title("🃏 The Joke Bot")
 
 if st.session_state.logged_in:
-    # Initialize session state for UI messages
     if "messages" not in st.session_state:
         st.session_state.messages = []
-        
-        # Optional: Fetch existing history from MongoDB on first login
-        # This keeps the UI synced with your database
-        try:
-            # You can add a GET endpoint to your FastAPI to fetch history if you want it to persist across refreshes
-            pass 
-        except:
-            pass
 
     # Display chat history
     for msg in st.session_state.messages:
@@ -71,8 +63,9 @@ if st.session_state.logged_in:
 
         with st.chat_message("assistant"):
             try:
+                # Post to the dynamic BASE_URL
                 response = requests.post(
-                    "http://127.0.0.1:8000/chat", 
+                    f"{BASE_URL}/chat", 
                     json={"user_id": st.session_state.user_id, "question": prompt}
                 )
                 if response.status_code == 200:
@@ -80,7 +73,7 @@ if st.session_state.logged_in:
                     st.markdown(answer)
                     st.session_state.messages.append({"role": "assistant", "content": answer})
                 else:
-                    st.error("Backend Error")
+                    st.error(f"Backend Error: {response.status_code}")
             except Exception as e:
                 st.error(f"Connection Failed: {e}")
 else:
